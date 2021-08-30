@@ -16,8 +16,7 @@ double lookupVal(int n, double *x, double *y, double xval) {
 int main(int argc, char *argv[]) {
   // Argument parsing
   if (argc < 2) {
-    std::cout << "Missing arguments. Usage: ./lookup <numPE>"
-              << std::endl;
+    std::cout << "Missing arguments. Usage: ./lookup <numPE>" << std::endl;
     return -1;
   }
   int numPE = std::stoi(argv[1]);
@@ -83,21 +82,28 @@ int main(int argc, char *argv[]) {
   // Scatter and do lookup
   int process_num_elems = counts[myPE];
   double process_x_vals[process_num_elems];
-  if (myPE == 0) {
-    // Process 0 sends and receives
-    MPI_Scatterv(xvals, counts, displacements, MPI_DOUBLE, process_x_vals,
-                 process_num_elems, MPI_DOUBLE, root_rank, MPI_COMM_WORLD);
-  } else {
-    // All other processes receive only
-    MPI_Scatterv(NULL, NULL, NULL, NULL, process_x_vals, process_num_elems,
-                 MPI_DOUBLE, root_rank, MPI_COMM_WORLD);
-  }
+  MPI_Scatterv(xvals, counts, displacements, MPI_DOUBLE, process_x_vals,
+               process_num_elems, MPI_DOUBLE, root_rank, MPI_COMM_WORLD);
+
   // Lookup and print
-  double curr_xval, curr_yval;
+  double process_y_vals[process_num_elems];
   for (int i = 0; i < process_num_elems; ++i) {
-    curr_xval = xvals[i];
-    curr_yval = lookupVal(n, x, y, curr_xval);
-    std::cout << curr_xval << " -> " << curr_yval << std::endl;
+    double curr_xval = process_x_vals[i];
+    process_y_vals[i] = lookupVal(n, x, y, curr_xval);
+  }
+
+  double out_x_vals[num_to_lookup]; // Duplicating to keep order...
+  double out_y_vals[num_to_lookup];
+  MPI_Gatherv(process_x_vals, process_num_elems, MPI_DOUBLE, out_x_vals, counts,
+              displacements, MPI_DOUBLE, root_rank, MPI_COMM_WORLD);
+  MPI_Gatherv(process_y_vals, process_num_elems, MPI_DOUBLE, out_y_vals, counts,
+              displacements, MPI_DOUBLE, root_rank, MPI_COMM_WORLD);
+
+
+  if (myPE == 0) {
+    for (int i = 0; i < num_to_lookup; ++i) {
+      std::cout << out_x_vals[i] << " -> " << out_y_vals[i] << std::endl;
+    }
   }
 
   // End Parallel
