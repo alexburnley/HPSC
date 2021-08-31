@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
 
   // Global variables for all processes
   double x[n], y[n];
-  int num_to_lookup = 100;
+  int num_to_lookup = 102;
   double xvals[num_to_lookup];
   if (myPE == 0) {
     // Print diagnostic info
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 
   if (myPE == 0) {
     for (int i = 0; i < num_to_lookup; ++i) {
-      std::cout << out_x_vals[i] << " -> " << out_y_vals[i] << std::endl;
+      std::cout << "(" << i << ") " << out_x_vals[i] << " -> " << out_y_vals[i] << std::endl;
     }
   }
 
