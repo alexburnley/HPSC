@@ -52,7 +52,6 @@ int main(int argc, char *argv[]) {
   // Broadcast to all processes
   MPI_Bcast(x, n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   MPI_Bcast(y, n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-  MPI_Bcast(xvals, num_to_lookup, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
   // Generate counts/displacements for Scatterv
   int counts[numPE];
@@ -60,43 +59,50 @@ int main(int argc, char *argv[]) {
   // Build array on a single process (maybe unnecessary, small array...)
   if (myPE == 0) {
     int elements_per_process = (int)num_to_lookup / numPE;
-    int extra_elements_for_last_process = num_to_lookup % numPE;
+    int extra_elements= num_to_lookup % numPE;
+
+    int sum_of_elements = 0;
 
     for (int i = 0; i < numPE; ++i) {
+
       counts[i] = elements_per_process;
-      // extra_elements < elements_per_process
-      // So, we can just distribute from 0 to extra_elements-1
-      // This gives the most even distribution
-      if (extra_elements_for_last_process > 0) {
-        counts[i] += 1;
-        extra_elements_for_last_process -= 1;
+
+      // Add spare elements to count if necessary, spreading them as 
+      // evenly as possible across processes
+      if(i < extra_elements) {
+        counts[i]++;
       }
-      // Displacements indicate start positions of counts[i]
-      displacements[i] = elements_per_process * i;
+
+      // Set displacements to sum of elements so far
+      displacements[i] = sum_of_elements;
+
+      sum_of_elements += counts[i];
     }
   }
-  // Broadcast counts/displacements since everyone needs them
-  MPI_Bcast(counts, numPE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-  MPI_Bcast(displacements, numPE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-  // Scatter and do lookup
-  int process_num_elems = counts[myPE];
-  double process_x_vals[process_num_elems];
+  // Tell each process how many elements they will lookup
+  int num_to_process;
+  MPI_Scatter(counts, 1, MPI_INT, &num_to_process, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+
+
+  // Scatter elements to lookup to processes with different 
+  double process_x_vals[num_to_process];
   MPI_Scatterv(xvals, counts, displacements, MPI_DOUBLE, process_x_vals,
-               process_num_elems, MPI_DOUBLE, root_rank, MPI_COMM_WORLD);
+               num_to_process, MPI_DOUBLE, root_rank, MPI_COMM_WORLD);
 
   // Lookup and print
-  double process_y_vals[process_num_elems];
-  for (int i = 0; i < process_num_elems; ++i) {
+  double process_y_vals[num_to_process];
+  for (int i = 0; i < num_to_process; ++i) {
     double curr_xval = process_x_vals[i];
     process_y_vals[i] = lookupVal(n, x, y, curr_xval);
   }
 
   double out_x_vals[num_to_lookup]; // Duplicating to keep order...
   double out_y_vals[num_to_lookup];
-  MPI_Gatherv(process_x_vals, process_num_elems, MPI_DOUBLE, out_x_vals, counts,
+  MPI_Gatherv(process_x_vals, num_to_process, MPI_DOUBLE, out_x_vals, counts,
               displacements, MPI_DOUBLE, root_rank, MPI_COMM_WORLD);
-  MPI_Gatherv(process_y_vals, process_num_elems, MPI_DOUBLE, out_y_vals, counts,
+  MPI_Gatherv(process_y_vals, num_to_process, MPI_DOUBLE, out_y_vals, counts,
               displacements, MPI_DOUBLE, root_rank, MPI_COMM_WORLD);
 
 
